@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Firma chek-list</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #000);
+    --text: var(--tg-theme-text-color, #fff);
+    --hint: var(--tg-theme-hint-color, #a8a8a8);
+    --card: var(--tg-theme-secondary-bg-color, #2c2c2e);
+    --accent: var(--tg-theme-button-color, #2f80ed);
+    --border: rgba(127,127,127,.35);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 16px; background: var(--bg); color: var(--text);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 14px; }
+  .label { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+
+  /* Firma tanlash */
+  .select { position: relative; }
+  .select-btn {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 18px; border: 1px solid var(--border); border-radius: 22px;
+    background: transparent; color: var(--text); font: inherit; font-size: 14px; cursor: pointer;
+  }
+  .select-btn svg { flex: none; transition: transform .2s; }
+  .select.open .select-btn svg { transform: rotate(180deg); }
+  .menu {
+    display: none; position: absolute; left: 0; right: 0; top: calc(100% + 8px); z-index: 10;
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.4); max-height: 60vh; overflow-y: auto;
+  }
+  .select.open .menu { display: block; }
+  .menu-item {
+    padding: 9px 12px 9px 32px; border-radius: 8px; font-size: 13.5px; cursor: pointer; position: relative;
+  }
+  .menu-item:hover, .menu-item:active { background: rgba(255,255,255,.08); }
+  .menu-item.active { font-weight: 700; }
+  .menu-item.active::before { content: "✓"; position: absolute; left: 12px; }
+  .menu-item .count { float: right; color: var(--hint); font-weight: 400; font-size: 12px; }
+
+  hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  .firm-id { font-size: 12.5px; color: var(--hint); margin-bottom: 14px; }
+
+  /* Vazifalar */
+  .task {
+    display: flex; align-items: flex-start; gap: 12px; padding: 8px 0; cursor: pointer; user-select: none;
+  }
+  .circle {
+    flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--hint);
+    display: grid; place-items: center; transition: background .15s, border-color .15s;
+  }
+  .circle svg { opacity: 0; transition: opacity .15s; }
+  .task.done .circle { background: var(--text); border-color: var(--text); }
+  .task.done .circle svg { opacity: 1; }
+  .task span { padding-top: 1px; }
+  .progress-text { font-size: 13px; margin-top: 12px; }
+  .bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+  .bar div { height: 100%; background: var(--accent); width: 0; transition: width .25s; }
+  .reset {
+    margin-top: 18px; background: none; border: 1px solid var(--border); color: var(--hint);
+    border-radius: 10px; padding: 8px 14px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <h1>Firma bo‘yicha chek-list</h1>
+  <div class="label">Firmani tanlang</div>
+
+  <div class="select" id="select">
+    <button class="select-btn" id="selectBtn" type="button">
+      <span id="selectText"></span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="menu" id="menu"></div>
+  </div>
+
+  <hr>
+
+  <h2 id="firmName"></h2>
+  <div class="firm-id" id="firmId"></div>
+  <div id="tasks"></div>
+  <div class="progress-text" id="progress"></div>
+  <div class="bar"><div id="bar"></div></div>
+  <button class="reset" id="reset" type="button">Chek-listni tozalash</button>
+
+<script>
+// ===== Sozlamalar: firmalar va vazifalarni shu yerda o'zgartiring =====
+const FIRMS = [
+  { name: "LOOK INTO INFINITY",               id: "308807586" },
+  { name: "MIRACLESALE BIZNES",               id: "312660573" },
+  { name: "SALEBRIDGE BIZNES",                id: "" },
+  { name: "WE ARE OPENED (Next level trade)", id: "" },
+  { name: "WE ONLY HAVE BRANDS",              id: "" },
+  { name: "TURIST BIZNES TRADE",              id: "" },
+  { name: "MARKET BEAUTIFUL TRADE",           id: "" },
+  { name: "MAKRO NETWORK SAIL",               id: "" },
+  { name: "BUSINESS NEVER WALK ALONE",        id: "" },
+];
+
+const TASKS = [
+  "Bank urush va tekshirish",
+  "Fakturalarni qabul qilish",
+  "63-10 va 43-10 hisoblarini solishtirib chiqish",
+  "QQS (НДС) — ortiqcha to‘lov yoki to‘lov summasini aniqlash",
+  "Do‘kon va 1C tovar ostatkasini solishtirib chiqish",
+  "Schyotlarni yopish",
+  "Oyni yopish",
+];
+// =====================================================================
+
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTelegram = !!(tg && tg.initData);
+if (tg) { tg.ready(); tg.expand(); }
+
+// Saqlash: Telegram ichida CloudStorage (har foydalanuvchiga alohida, barcha qurilmalarda),
+// oddiy brauzerda — localStorage.
+const STORE_KEY = "checklist_v1";
+const store = {
+  load() {
+    return new Promise(resolve => {
+      if (inTelegram && tg.CloudStorage) {
+        tg.CloudStorage.getItem(STORE_KEY, (err, val) => {
+          try { resolve(val ? JSON.parse(val) : {}); } catch { resolve({}); }
+        });
+      } else {
+        try { resolve(JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch { resolve({}); }
+      }
+    });
+  },
+  save(data) {
+    const s = JSON.stringify(data);
+    if (inTelegram && tg.CloudStorage) tg.CloudStorage.setItem(STORE_KEY, s);
+    else { try { localStorage.setItem(STORE_KEY, s); } catch {} }
+  },
+};
+
+// state = { selected: 0, done: { [firmIndex]: [taskIndex, ...] } }
+let state = { selected: 0, done: {} };
+
+const $ = id => document.getElementById(id);
+const checkSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--bg)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+function doneOf(i) { return state.done[i] || []; }
+
+function haptic(type) {
+  if (inTelegram && tg.HapticFeedback) tg.HapticFeedback.selectionChanged(type);
+}
+
+function renderMenu() {
+  $("menu").innerHTML = FIRMS.map((f, i) => {
+    const n = doneOf(i).length;
+    return `<div class="menu-item ${i === state.selected ? "active" : ""}" data-i="${i}">
+      ${f.name}<span class="count">${n}/${TASKS.length}</span></div>`;
+  }).join("");
+}
+
+function render() {
+  const firm = FIRMS[state.selected];
+  const done = doneOf(state.selected);
+  $("selectText").textContent = firm.name;
+  $("firmName").textContent = firm.name;
+  $("firmId").textContent = "Firma ID: " + (firm.id || "—");
+  $("tasks").innerHTML = TASKS.map((t, i) => `
+    <div class="task ${done.includes(i) ? "done" : ""}" data-i="${i}">
+      <div class="circle">${checkSvg}</div><span>${i + 1}. ${t}</span>
+    </div>`).join("");
+  $("progress").textContent = `Bajarildi: ${done.length}/${TASKS.length}`;
+  $("bar").style.width = (done.length / TASKS.length * 100) + "%";
+  renderMenu();
+}
+
+$("selectBtn").onclick = e => { e.stopPropagation(); $("select").classList.toggle("open"); };
+document.addEventListener("click", () => $("select").classList.remove("open"));
+
+$("menu").onclick = e => {
+  const item = e.target.closest(".menu-item");
+  if (!item) return;
+  state.selected = +item.dataset.i;
+  $("select").classList.remove("open");
+  haptic();
+  store.save(state);
+  render();
+};
+
+$("tasks").onclick = e => {
+  const row = e.target.closest(".task");
+  if (!row) return;
+  const t = +row.dataset.i;
+  const done = doneOf(state.selected);
+  state.done[state.selected] = done.includes(t) ? done.filter(x => x !== t) : [...done, t].sort((a, b) => a - b);
+  haptic();
+  store.save(state);
+  render();
+  if (state.done[state.selected].length === TASKS.length && inTelegram && tg.HapticFeedback) {
+    tg.HapticFeedback.notificationOccurred("success");
+  }
+};
+
+$("reset").onclick = () => {
+  const ask = () => { state.done[state.selected] = []; store.save(state); render(); };
+  const msg = FIRMS[state.selected].name + " chek-listini tozalaysizmi?";
+  if (inTelegram && tg.showConfirm) tg.showConfirm(msg, ok => ok && ask());
+  else if (confirm(msg)) ask();
+};
+
+store.load().then(saved => {
+  if (saved && typeof saved === "object") {
+    state.selected = Number.isInteger(saved.selected) && FIRMS[saved.selected] ? saved.selected : 0;
+    state.done = saved.done || {};
+  }
+  render();
+});
+render();
+</script>
+</body>
+</html>
